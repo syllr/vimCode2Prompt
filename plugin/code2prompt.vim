@@ -311,23 +311,25 @@ def ProcessSelectedFiles(lines: list<any>): void
     g:code2prompt_origin_file = current_origin
   endif
 
-  # 只读模式打开文件
+  # 只读模式打开文件，然后在新缓冲区安装 y/Y 监听
+  # 监听只安装在新缓冲区，关闭后自动失效
   if has_key(actions, key)
     var cmd = actions[key]
     if key == 'ctrl-t' && len(lines) == 2
       # Ctrl-T 单个文件: 直接在新标签页打开
       var abs_path = lines[1]
-      execute cmd .. ' | view ' .. fnameescape(abs_path)
+      # 打开后，在新缓冲区安装监听
+      execute cmd .. ' | view ' .. fnameescape(abs_path) .. ' | call Code2Prompt_InstallYankListener()'
     else
       # 多个文件或 Ctrl-X/Ctrl-V 分割: 正常打开
       if len(lines) == 2
         # 单个文件
         var abs_path = lines[1]
-        execute cmd .. ' | view ' .. fnameescape(abs_path)
+        execute cmd .. ' | view ' .. fnameescape(abs_path) .. ' | call Code2Prompt_InstallYankListener()'
       else
-        # 多个文件 - 第一行是按键，每个文件都打开
+        # 多个文件 - 第一行是按键，每个文件都打开，每个都安装监听
         for abs_path in lines[1 : ]
-          execute cmd .. ' | view ' .. fnameescape(abs_path)
+          execute cmd .. ' | view ' .. fnameescape(abs_path) .. ' | call Code2Prompt_InstallYankListener()'
         endfor
       endif
     endif
@@ -335,6 +337,70 @@ def ProcessSelectedFiles(lines: list<any>): void
     # 未知按键 - 回退: 把第一行当作文件名
     ProcessSelectedFile(key)
   endif
+enddef
+
+# -------------------------------------
+# y/Y 自动监听：yank 后自动追加到源文件并关闭当前 tab
+# 只在当前缓冲区生效（缓冲区局部映射）
+# -------------------------------------
+
+# Vim9: 导出为全局函数，这样映射才能调用
+export def Code2Prompt_AutoAppendAfterYank(is_capital: bool): void
+  # 从默认寄存器获取刚刚 yank 的内容
+  var yanked_content = getreg('"')
+  if strlen(yanked_content) == 0
+    # 没有内容，不处理
+    return
+  endif
+
+  # 分割成行
+  var content_lines = split(yanked_content, '\n', 1)
+
+  # 给内容加上文件信息头（和可视模式处理保持一致）
+  var current_file = expand('%:p')
+  var display_path = fnamemodify(current_file, ':~')
+  var lines: list<string> = []
+  add(lines, 'File: ' .. display_path)
+  add(lines, '```')
+  for line in content_lines
+    add(lines, line)
+  endfor
+  add(lines, '```')
+  add(lines, '')
+
+  # 追加到源文件
+  if AppendToOriginFile(lines, display_path, false)
+    # 追加成功，关闭当前缓冲区/tab
+    # 只有当有多个 tab 时才关闭，避免关闭最后一个 tab 导致 Vim 退出
+    if tabpagenr('$') > 1
+      silent tabclose
+    elseif winnr('$') > 1
+      # 多个窗口分割时关闭当前窗口
+      silent close
+    endif
+  else
+    # 追加失败，清除映射恢复原生行为
+    nunmap <buffer> y
+    nunmap <buffer> Y
+    vunmap <buffer> y
+    vunmap <buffer> Y
+  endif
+enddef
+
+export def Code2Prompt_InstallYankListener(): void
+  # 只有当存在源文件时才安装监听
+  if g:code2prompt_origin_file == ''
+    return
+  endif
+
+  # 普通模式 y: 先执行原生 y 命令，然后执行自动追加
+  nnoremap <buffer> y y:<C-U>call <SID>Code2Prompt_AutoAppendAfterYank(v:false)<CR>
+  # 普通模式 Y: 先执行原生 Y 命令，然后执行自动追加
+  nnoremap <buffer> Y Y:<C-U>call <SID>Code2Prompt_AutoAppendAfterYank(v:true)<CR>
+  # 可视模式 y: 先执行原生 y 命令，然后执行自动追加
+  vnoremap <buffer> y y:<C-U>call <SID>Code2Prompt_AutoAppendAfterYank(v:false)<CR>
+  # 可视模式 Y: 先执行原生 Y 命令，然后执行自动追加
+  vnoremap <buffer> Y Y:<C-U>call <SID>Code2Prompt_AutoAppendAfterYank(v:true)<CR>
 enddef
 
 # -------------------------------------
