@@ -70,7 +70,7 @@ enddef
 # 返回: 成功 → 分割好的内容行列表（非空），失败 → 空列表
 def RunCode2prompt(abs_path: string): list<string>
   # 转换为相对于当前工作目录（通常是项目根目录）的相对路径
-  # code2prompt 接收相对路径输入就可以了，输入路径更干净
+  # code2prompt 使用 . --include= 格式处理，从项目根目录开始
   # 添加 ./ 前缀确保 code2prompt 能正确识别当前目录下的路径
   var rel_path = fnamemodify(abs_path, ':.')
   # 如果不是以 ./ 和 / 开头，加上 ./ 前缀
@@ -83,8 +83,28 @@ def RunCode2prompt(abs_path: string): list<string>
     # 其他情况，加上 ./ 前缀
     rel_path = './' .. rel_path
   endif
-  # 固定参数: 直接处理目标路径, -l 输出行号, --absolute-paths 生成输出中使用绝对路径, -c 输出复制到剪贴板
-  var cmd = 'code2prompt ' .. shellescape(rel_path) .. ' -l --absolute-paths -c 2>&1'
+
+  # 检查路径中是否有任何一级是以 . 开头的隐藏目录/文件
+  # 只要路径中有一个组件是隐藏的，就需要添加 --include-hidden 参数
+  # 例如 .git/, .claude/, .gitmodules 等都需要
+  var components = split(rel_path, '/')
+  var need_include_hidden = false
+  for comp in components
+    if len(comp) > 0 && strpart(comp, 0, 1) ==# '.'
+      need_include_hidden = true
+      break
+    endif
+  endfor
+
+  # 使用 code2prompt . --include= 格式，用户要求必须使用这种方式
+  # 如果路径包含隐藏组件，添加 --hidden 参数（code2prompt 使用 --hidden 来包含隐藏文件）
+  var cmd_parts = ['code2prompt', '.', '--include=' .. shellescape(rel_path), '-l', '--absolute-paths', '-c']
+  if need_include_hidden
+    add(cmd_parts, '--hidden')
+  endif
+  add(cmd_parts, '2>&1')
+
+  var cmd = join(cmd_parts, ' ')
   var output = system(cmd)
 
   if v:shell_error != 0
