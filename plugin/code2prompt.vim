@@ -871,5 +871,14 @@ augroup Code2PromptClaudeDetection
 augroup END
 
 # -------------------------------------
+# 快捷键绑定
+# -------------------------------------
+
+# \c 快捷键触发 :Code2Prompt（普通模式）
+nnoremap <silent> \c :Code2Prompt<CR>
+# \c 快捷键触发 :Code2Prompt（可视模式）
+vnoremap <silent> \c :Code2Prompt<CR>
+
+# -------------------------------------
 # 插件结束
 # -------------------------------------
