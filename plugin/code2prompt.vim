@@ -83,9 +83,8 @@ def RunCode2prompt(abs_path: string): list<string>
     # 其他情况，加上 ./ 前缀
     rel_path = './' .. rel_path
   endif
-  # 固定参数: . 从当前工作目录开始扫描, --include 指定只包含目标文件/目录
-  # -l 输出行号, --absolute-paths 生成输出中使用绝对路径, -c 输出复制到剪贴板
-  var cmd = 'code2prompt . --include=' .. shellescape(rel_path) .. ' -l --absolute-paths -c 2>&1'
+  # 固定参数: 直接处理目标路径, -l 输出行号, --absolute-paths 生成输出中使用绝对路径, -c 输出复制到剪贴板
+  var cmd = 'code2prompt ' .. shellescape(rel_path) .. ' -l --absolute-paths -c 2>&1'
   var output = system(cmd)
 
   if v:shell_error != 0
